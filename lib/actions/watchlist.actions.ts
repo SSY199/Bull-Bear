@@ -2,8 +2,7 @@
 
 import { connectToDatabase } from '@/database/mongoose';
 import Watchlist from '@/database/models/watchlist.model';
-import { auth } from '@/lib/better-auth/auth';
-import { headers } from 'next/headers';
+import { auth, currentUser } from '@clerk/nextjs/server';
 
 // Better-auth MongoDB adapter uses collection "user" (singular), not "users"
 const USER_COLLECTION = 'user';
@@ -11,6 +10,20 @@ const USER_COLLECTION = 'user';
 function getUserIdFromDbUser(user: { id?: string; _id?: unknown } | null): string | null {
   if (!user) return null;
   return user.id ?? (user._id != null ? String(user._id) : null) ?? null;
+}
+
+function mapWatchlistDocToStockWithData(doc: any): StockWithData {
+  return {
+    userId: typeof doc.userId === 'string' ? doc.userId : String(doc.userId ?? ''),
+    symbol: typeof doc.symbol === 'string' ? doc.symbol : '',
+    company: typeof doc.company === 'string' ? doc.company : '',
+    addedAt:
+      doc.addedAt instanceof Date
+        ? doc.addedAt.toISOString()
+        : typeof doc.addedAt === 'string'
+          ? doc.addedAt
+          : new Date().toISOString(),
+  } as StockWithData;
 }
 
 export const getWatchlistSymbolsByEmail = async (
@@ -72,24 +85,61 @@ export const getWatchlistByEmail = async (email: string): Promise<StockWithData[
       .sort({ addedAt: -1 })
       .lean();
 
-    return items as unknown as StockWithData[];
+    return items.map(mapWatchlistDocToStockWithData);
   } catch (e) {
     console.error('Error fetching watchlist:', e);
     return [];
   }
 };
 
-export const addToWatchlist = async (params: { symbol: string; company: string }) => {
+export const getWatchlistForCurrentUser = async (): Promise<StockWithData[]> => {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const { userId } = await auth();
+    if (!userId) return [];
 
-    if (!session?.user?.id) {
-      throw new Error('User not authenticated');
+    await connectToDatabase();
+
+    const items = await Watchlist.find({ userId })
+      .select('userId symbol company addedAt')
+      .sort({ addedAt: -1 })
+      .lean();
+
+    return items.map(mapWatchlistDocToStockWithData);
+  } catch (error) {
+    console.error('Error fetching watchlist for current user:', error);
+    return [];
+  }
+};
+
+export const getWatchlistSymbolsForCurrentUser = async (): Promise<string[]> => {
+  try {
+    const user = await currentUser();
+    const email = user?.emailAddresses?.[0]?.emailAddress;
+
+    // Backward compatibility: if watchlist docs were tied to better-auth users by email lookup.
+    if (email) {
+      const byEmail = await getWatchlistSymbolsByEmail(email);
+      if (byEmail.length > 0) return byEmail;
     }
 
-    const userId = session.user.id;
+    const { userId } = await auth();
+    if (!userId) return [];
+
+    await connectToDatabase();
+    const items = await Watchlist.find({ userId }).select('symbol').lean();
+    return items.map((item) => item.symbol);
+  } catch (error) {
+    console.error('Error fetching watchlist symbols for current user:', error);
+    return [];
+  }
+};
+
+export const addToWatchlist = async (params: { symbol: string; company: string }) => {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      throw new Error('User not authenticated');
+    }
 
     const mongoose = await connectToDatabase();
     const db = mongoose.connection.db;
@@ -118,15 +168,10 @@ export const addToWatchlist = async (params: { symbol: string; company: string }
 
 export const removeFromWatchlist = async (symbol: string) => {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+    if (!userId) {
       throw new Error('User not authenticated');
     }
-
-    const userId = session.user.id;
 
     const mongoose = await connectToDatabase();
     const db = mongoose.connection.db;

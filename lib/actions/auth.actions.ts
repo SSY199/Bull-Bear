@@ -1,98 +1,16 @@
 'use server';
-import { auth } from "@/lib/better-auth/auth";
-import { inngest } from "../inngest/client";
-import { headers } from "next/headers";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { ObjectId } from "mongodb";
-
-export const signupWithEmail = async({ email, password, fullName, country, investmentGoals, riskTolerance, preferredIndustry }: SignUpFormData) => {
-  try {
-    const res = await auth.api.signUpEmail({
-      body: {
-        email,
-        password,
-        name: fullName,
-      }
-    })
-    if(res){
-      await inngest.send({
-        name: 'app/user.created',
-        data: {
-          email,
-          name: fullName,
-          country,
-          investmentGoals,
-          riskTolerance,
-          preferredIndustry,
-        }
-      })
-    }
-    return {
-      success: true,
-      message: 'Signup with email successful',
-      data: res,
-    }
-  } catch (error) {
-    console.log('Signup with email failed', error);
-    return {
-      success: false,
-      message: 'Signup with email failed',
-      data: error,
-    }
-  }
-}
-
-
-
-export const signOut = async() => {
-  try {
-    await auth.api.signOut({ headers: await headers()});
-    return {
-      success: true,
-      message: 'Sign out successful',
-    }
-  } catch (error) {
-    console.log('Sign out failed', error);
-    return {
-      success: false,
-      message: 'Sign out failed',
-      data: error,
-    }
-  }
-}
-
-
-export const signinWithEmail = async({ email, password }: SignInFormData) => {
-  try {
-    const res = await auth.api.signInEmail({
-      body: {
-        email,
-        password,
-      }
-    })
-    return {
-      success: true,
-      message: 'Signin with email successful',
-      data: res,
-    }
-  } catch (error) {
-    console.log('Signin with email failed', error);
-    return {
-      success: false,
-      message: 'Signin with email failed',
-      data: error,
-    }
-  }
-}
+import Alert from "@/database/models/alert.model";
+import Watchlist from "@/database/models/watchlist.model";
 
 export const deleteAccount = async () => {
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const { userId } = await auth();
 
-    if (!session?.user?.id) {
+    if (!userId) {
       return { success: false, message: "No active session found" };
     }
-
-    const userId = session.user.id;
 
     const { connectToDatabase } = await import("@/database/mongoose");
     const mongoose = await connectToDatabase();
@@ -100,19 +18,22 @@ export const deleteAccount = async () => {
 
     if (!db) throw new Error("Database connection not found");
 
-    // ✅ Correct collection name
+    // Keep compatibility with any historical better-auth IDs in MongoDB.
+    if (ObjectId.isValid(userId)) {
+      await Promise.all([
+        db.collection("user").deleteOne({ _id: new ObjectId(userId) }),
+        db.collection("session").deleteMany({ userId }),
+        db.collection("account").deleteMany({ userId }),
+      ]);
+    }
+
     await Promise.all([
-      db.collection("user").deleteOne({ _id: new ObjectId(userId) }),
-      db.collection("session").deleteMany({ userId }),
-      db.collection("account").deleteMany({ userId }),
+      Watchlist.deleteMany({ userId }),
+      Alert.deleteMany({ userId }),
     ]);
 
-    // ✅ Delete watchlist
-    const Watchlist = (await import("@/database/models/watchlist.model")).default;
-    await Watchlist.deleteMany({ userId });
-
-    // ✅ Sign out
-    await auth.api.signOut({ headers: await headers() });
+    const client = await clerkClient();
+    await client.users.deleteUser(userId);
 
     return {
       success: true,

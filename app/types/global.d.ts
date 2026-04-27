@@ -140,7 +140,7 @@ declare global {
         userId: string;
         symbol: string;
         company: string;
-        addedAt: Date;
+        addedAt: string | Date;
         currentPrice?: number;
         changePercent?: number;
         priceFormatted?: string;
@@ -160,6 +160,7 @@ declare global {
         source: string;
         url: string;
         datetime: number;
+        publishedAtLabel?: string;
         category: string;
         related: string;
         image?: string;
@@ -216,6 +217,40 @@ declare global {
         threshold: number;
         changePercent?: number;
     };
+
+    type PredictionCharts = {
+        ema_20_50: string;
+        ema_100_200: string;
+        prediction: string;
+    };
+
+    type PredictResponseData = {
+        symbol: string;
+        currencyCode: string;
+        predictedPrice: number;
+        currentPrice: number;
+        changeAmount: number;
+        changePercent: number;
+        trainingSamples: number;
+        testSamples: number;
+        generatedAt: string;
+        charts?: PredictionCharts | null;
+    };
+
+    type PredictApiSuccess = {
+        status: 'success';
+        data: PredictResponseData;
+    };
+
+    type PredictApiError = {
+        status: 'error';
+        error?: {
+            code: string;
+            message: string;
+        };
+    };
+
+    type PredictApiResponse = PredictApiSuccess | PredictApiError;
 }
 
 export {};

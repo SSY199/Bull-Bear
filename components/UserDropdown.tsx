@@ -14,15 +14,17 @@ import { useRouter } from 'next/navigation'
 import { Button } from './ui/button'
 import { LogOut, UserMinus } from 'lucide-react'
 import NavItems from './NavItems'
-import { signOut, deleteAccount } from '@/lib/actions/auth.actions'
+import { deleteAccount } from '@/lib/actions/auth.actions'
+import { useClerk } from '@clerk/nextjs'
 
 const UserDropdown = ({ user, initialStocks }: { user: User, initialStocks: StockWithWatchlistStatus[] }) => {
 
   const router = useRouter();
+  const { signOut } = useClerk();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleSignOut = async() => {
-    await signOut();
+    await signOut({ redirectUrl: '/sign-in' });
     router.push("/sign-in");
   }
 

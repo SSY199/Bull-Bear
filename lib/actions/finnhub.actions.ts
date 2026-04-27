@@ -7,6 +7,22 @@ import { POPULAR_STOCK_SYMBOLS } from '@/lib/constants';
 const FINNHUB_BASE_URL = 'https://finnhub.io/api/v1';
 const NEXT_PUBLIC_FINNHUB_API_KEY = process.env.NEXT_PUBLIC_FINNHUB_API_KEY;
 const getFinnhubToken = () => process.env.FINNHUB_API_KEY ?? NEXT_PUBLIC_FINNHUB_API_KEY;
+let hasWarnedMissingFinnhubToken = false;
+
+const getFinnhubTokenOrNull = (): string | null => {
+  const token = getFinnhubToken();
+
+  if (!token) {
+    // Warn only once to avoid noisy logs on each render/request.
+    if (!hasWarnedMissingFinnhubToken) {
+      console.warn('FINNHUB API key is not configured. Set FINNHUB_API_KEY (or NEXT_PUBLIC_FINNHUB_API_KEY).');
+      hasWarnedMissingFinnhubToken = true;
+    }
+    return null;
+  }
+
+  return token;
+};
 
 type FetchOptions = {
   revalidateSeconds?: number;
@@ -40,7 +56,7 @@ export const fetchJSON = async <T>(
 
 export const getQuote = cache(async (symbol: string): Promise<QuoteData | null> => {
   try {
-    const token = getFinnhubToken();
+    const token = getFinnhubTokenOrNull();
     if (!token) return null;
     const upper = symbol.trim().toUpperCase();
     if (!upper) return null;
@@ -57,7 +73,7 @@ export const getQuote = cache(async (symbol: string): Promise<QuoteData | null> 
 
 export const getProfile = cache(async (symbol: string): Promise<ProfileData | null> => {
   try {
-    const token = getFinnhubToken();
+    const token = getFinnhubTokenOrNull();
     if (!token) return null;
     const upper = symbol.trim().toUpperCase();
     if (!upper) return null;
@@ -73,7 +89,7 @@ export const getProfile = cache(async (symbol: string): Promise<ProfileData | nu
 
 export const getBasicFinancials = cache(async (symbol: string): Promise<FinancialsData | null> => {
   try {
-    const token = getFinnhubToken();
+    const token = getFinnhubTokenOrNull();
     if (!token) return null;
     const upper = symbol.trim().toUpperCase();
     if (!upper) return null;
@@ -91,6 +107,9 @@ export const getNews = async (
   symbols?: string[]
 ): Promise<MarketNewsArticle[]> => {
   try {
+    const token = getFinnhubTokenOrNull();
+    if (!token) return [];
+
     const { from, to } = getDateRange(5);
 
     // If symbols exist, fetch company news
@@ -113,7 +132,7 @@ export const getNews = async (
         const symbol = cleanedSymbols[symbolIndex];
 
         try {
-          const url = `${FINNHUB_BASE_URL}/company-news?symbol=${symbol}&from=${from}&to=${to}&token=${NEXT_PUBLIC_FINNHUB_API_KEY}`;
+          const url = `${FINNHUB_BASE_URL}/company-news?symbol=${symbol}&from=${from}&to=${to}&token=${token}`;
           const news = await fetchJSON<RawNewsArticle[]>(url);
 
           if (news && news.length > 0) {
@@ -154,7 +173,10 @@ export const getNews = async (
 
 const fetchGeneralNews = async (): Promise<MarketNewsArticle[]> => {
   try {
-    const url = `${FINNHUB_BASE_URL}/news?category=general&token=${NEXT_PUBLIC_FINNHUB_API_KEY}`;
+    const token = getFinnhubTokenOrNull();
+    if (!token) return [];
+
+    const url = `${FINNHUB_BASE_URL}/news?category=general&token=${token}`;
     const news = await fetchJSON<RawNewsArticle[]>(url);
 
     if (!news || news.length === 0) {
@@ -188,12 +210,8 @@ const fetchGeneralNews = async (): Promise<MarketNewsArticle[]> => {
 
 export const searchStocks = cache(async (query?: string): Promise<StockWithWatchlistStatus[]> => {
   try {
-    const token = getFinnhubToken();
-    if (!token) {
-      // If no token, log and return empty to avoid throwing per requirements
-      console.error('Error in stock search:', new Error('FINNHUB API key is not configured'));
-      return [];
-    }
+    const token = getFinnhubTokenOrNull();
+    if (!token) return [];
 
     const trimmed = typeof query === 'string' ? query.trim() : '';
 

@@ -8,16 +8,15 @@ import {
   COMPANY_PROFILE_WIDGET_CONFIG,
   COMPANY_FINANCIALS_WIDGET_CONFIG,
 } from '@/lib/constants'
-import { getWatchlistSymbolsByEmail } from '@/lib/actions/watchlist.actions'
-import { getProfile } from '@/lib/actions/finnhub.actions'
-import { auth } from '@/lib/better-auth/auth'
-import { headers } from 'next/headers'
+import { getWatchlistSymbolsForCurrentUser } from '@/lib/actions/watchlist.actions'
 
 type StockDetailsProps = {
   params: Promise<{
     symbol: string
   }>
 }
+
+export const dynamic = 'force-dynamic'
 
 const StockDetails = async ({ params }: StockDetailsProps) => {
   const { symbol } = await params
@@ -28,11 +27,8 @@ const StockDetails = async ({ params }: StockDetailsProps) => {
   const companyName = upperSymbol
 
   try {
-    const session = await auth.api.getSession({ headers: await headers() })
-    if (session?.user?.email) {
-      const watchlistSymbols = await getWatchlistSymbolsByEmail(session.user.email)
-      isInWatchlist = watchlistSymbols.includes(upperSymbol)
-    }
+    const watchlistSymbols = await getWatchlistSymbolsForCurrentUser()
+    isInWatchlist = watchlistSymbols.includes(upperSymbol)
   } catch (error) {
     console.error('Error checking watchlist status:', error)
   }

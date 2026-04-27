@@ -208,8 +208,7 @@ const WatchlistAlertsSection = ({
               </div>
               <div className="news-title">{article.headline}</div>
               <div className="news-meta">
-                {/* We keep relative time formatting on the server; here we show raw date */}
-                {new Date(article.datetime * 1000).toLocaleString()}
+                {article.publishedAtLabel ?? 'N/A'}
               </div>
               <div className="news-summary">{article.summary}</div>
               <div className="news-cta">Read more →</div>

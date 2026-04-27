@@ -1,19 +1,30 @@
 import WatchlistAlertsSection from '@/components/WatchlistAlertsSection'
-import { auth } from '@/lib/better-auth/auth'
-import { headers } from 'next/headers'
-import { getWatchlistByEmail } from '@/lib/actions/watchlist.actions'
+import { getWatchlistForCurrentUser } from '@/lib/actions/watchlist.actions'
 import { getBasicFinancials, getNews, getProfile, getQuote, searchStocks } from '@/lib/actions/finnhub.actions'
 import { formatChangePercent, formatMarketCapValue, formatPrice } from '@/lib/utils'
-import { getAlertsByEmail } from '@/lib/actions/alert.actions'
+import { getAlertsForCurrentUser } from '@/lib/actions/alert.actions'
 import SearchCommand from '@/components/SearchCommand'
 
-const WatchlistPage = async () => {
-  const session = await auth.api.getSession({ headers: await headers() })
-  const email = session?.user?.email
+export const dynamic = 'force-dynamic'
 
+const formatNewsTimestamp = (unixSeconds?: number): string => {
+  if (typeof unixSeconds !== 'number' || !Number.isFinite(unixSeconds)) {
+    return 'N/A'
+  }
+
+  const date = new Date(unixSeconds * 1000)
+  if (Number.isNaN(date.getTime())) {
+    return 'N/A'
+  }
+
+  // Deterministic format avoids server/client locale and timezone hydration mismatches.
+  return `${date.toISOString().slice(0, 19).replace('T', ' ')} UTC`
+}
+
+const WatchlistPage = async () => {
   const [initialStocks, watchlistItems] = await Promise.all([
     searchStocks(),
-    email ? getWatchlistByEmail(email) : Promise.resolve([]),
+    getWatchlistForCurrentUser(),
   ])
 
   const symbols = watchlistItems.map((w) => w.symbol?.toUpperCase()).filter(Boolean)
@@ -50,8 +61,13 @@ const WatchlistPage = async () => {
         return enriched
       })
     ),
-    email ? getAlertsByEmail(email) : Promise.resolve([]),
+    getAlertsForCurrentUser(),
   ])
+
+  const newsWithStableTime = news.map((article) => ({
+    ...article,
+    publishedAtLabel: formatNewsTimestamp(article.datetime),
+  }))
 
   if (!watchlistWithData.length) {
     return (
@@ -72,7 +88,7 @@ const WatchlistPage = async () => {
     <WatchlistAlertsSection
       initialStocks={initialStocks}
       watchlistWithData={watchlistWithData}
-      news={news}
+      news={newsWithStableTime}
       initialAlerts={alerts}
     />
   )

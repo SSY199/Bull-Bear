@@ -2,8 +2,7 @@
 
 import { connectToDatabase } from '@/database/mongoose';
 import Alert from '@/database/models/alert.model';
-import { auth } from '@/lib/better-auth/auth';
-import { headers } from 'next/headers';
+import { auth } from '@clerk/nextjs/server';
 import { getQuote } from '@/lib/actions/finnhub.actions';
 
 // Better-auth MongoDB adapter uses collection "user" (singular), not "users"
@@ -55,15 +54,11 @@ export const getAlertsByEmail = async (email: string): Promise<Alert[]> => {
 
 export const getAlertsForCurrentUser = async (): Promise<Alert[]> => {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+    if (!userId) {
       return [];
     }
 
-    const userId = session.user.id;
     await connectToDatabase();
 
     const alerts = await Alert.find({ userId }).sort({ createdAt: -1 }).lean();
@@ -78,15 +73,11 @@ export const createAlert = async (
   data: AlertData
 ): Promise<{ success: boolean; message: string; alert?: Alert }> => {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id || !session.user.email) {
+    const { userId } = await auth();
+    if (!userId) {
       throw new Error('User not authenticated');
     }
 
-    const userId = session.user.id;
     await connectToDatabase();
 
     const upperSymbol = data.symbol.trim().toUpperCase();
@@ -150,15 +141,11 @@ export const updateAlert = async (
   const { alertId, data } = params;
 
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+    if (!userId) {
       throw new Error('User not authenticated');
     }
 
-    const userId = session.user.id;
     await connectToDatabase();
 
     const updatePayload: any = {};
@@ -215,15 +202,11 @@ export const deleteAlert = async (
   alertId: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.id) {
+    const { userId } = await auth();
+    if (!userId) {
       throw new Error('User not authenticated');
     }
 
-    const userId = session.user.id;
     await connectToDatabase();
 
     const result = await Alert.deleteOne({ _id: alertId, userId });
