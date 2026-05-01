@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
+import dns from 'dns';
+
+dns.setServers(['1.1.1.1', '8.8.8.8']);
 
 export async function middleware(request: NextRequest) {
 	const sessionCookie = getSessionCookie(request);
